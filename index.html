@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fewgo Store</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<style>
+/* ── RESET & BASE ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --red: #e8001d;
+  --red-dark: #a8001a;
+  --red-glow: rgba(232,0,29,0.25);
+  --bg: #0a0a0a;
+  --bg2: #111;
+  --bg3: #181818;
+  --border: rgba(255,255,255,0.08);
+  --text: #f0f0f0;
+  --text-muted: #888;
+  --success: #00c97a;
+  --warning: #f5a623;
+  --font-head: 'Orbitron', monospace;
+  --font-body: 'Rajdhani', sans-serif;
+  --radius: 10px;
+  --transition: 0.2s ease;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── SCANLINE EFFECT ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── HEADER ── */
+header {
+  text-align: center;
+  padding: 24px 16px 16px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(10,10,10,0.95);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+}
+header h1 {
+  font-family: var(--font-head);
+  font-size: clamp(18px, 5vw, 28px);
+  color: var(--red);
+  letter-spacing: 4px;
+  text-shadow: 0 0 20px var(--red-glow);
+}
+header p { font-size: 12px; color: var(--text-muted); letter-spacing: 2px; margin-top: 4px; }
+
+/* ── TOAST NOTIFICATIONS ── */
+#toast-container {
+  position: fixed;
+  top: 90px;
+  right: 16px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid;
+  max-width: 280px;
+  animation: slideIn 0.3s ease;
+  cursor: pointer;
+}
+.toast-success { background: rgba(0,201,122,0.12); border-color: var(--success); color: var(--success); }
+.toast-error   { background: rgba(232,0,29,0.12);  border-color: var(--red);     color: var(--red); }
+.toast-info    { background: rgba(99,160,255,0.12); border-color: #63a0ff;        color: #63a0ff; }
+@keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
+
+/* ── NAV TABS ── */
+nav {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+nav::-webkit-scrollbar { display: none; }
+.nav-btn {
+  flex: 1;
+  min-width: 80px;
+  padding: 14px 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: var(--transition);
+  border-bottom: 2px solid transparent;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.nav-btn.active { color: var(--red); border-bottom-color: var(--red); }
+.nav-btn:hover:not(.active) { color: var(--text); }
+.nav-btn .badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-left: 5px;
+  font-weight: 700;
+}
+
+/* ── SECTIONS ── */
+.section { display: none; padding: 20px 16px; }
+.section.active { display: block; }
+
+/* ── AUTH SECTION ── */
+.auth-card {
+  max-width: 400px;
+  margin: 20px auto;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+}
+.auth-card h2 { font-family: var(--font-head); font-size: 16px; color: var(--red); margin-bottom: 24px; letter-spacing: 2px; }
+.auth-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(0,201,122,0.08);
+  border: 1px solid var(--success);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--success);
+}
+.auth-status .dot { width: 8px; height: 8px; background: var(--success); border-radius: 50%; flex-shrink: 0; }
+
+/* ── FORM ELEMENTS ── */
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="url"] {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  outline: none;
+  transition: var(--transition);
+}
+input:focus { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-glow); }
+input::placeholder { color: var(--text-muted); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: var(--transition);
+  text-transform: uppercase;
+  width: 100%;
+}
+.btn-primary { background: var(--red); color: #fff; }
+.btn-primary:hover { background: var(--red-dark); box-shadow: 0 4px 20px var(--red-glow); }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--red); color: var(--red); }
+.btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+.btn-danger { background: rgba(232,0,29,0.1); color: var(--red); border: 1px solid var(--red); }
+.btn-sm { padding: 8px 14px; font-size: 12px; width: auto; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-row { display: flex; gap: 10px; margin-top: 16px; }
+
+/* ── PRODUCTS GRID ── */
+.products-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.products-header h2 { font-family: var(--font-head); font-size: 13px; color: var(--text-muted); letter-spacing: 2px; }
+.products { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: var(--transition);
+  cursor: pointer;
+  position: relative;
+}
+.card:hover { border-color: var(--red); transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.4); }
+.card img {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+  display: block;
+  background: var(--bg3);
+}
+.card-body { padding: 12px; }
+.card-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-price { font-size: 16px; font-weight: 700; color: var(--red); font-family: var(--font-head); }
+.card-add {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: var(--transition);
+}
+.card-add:hover { background: var(--red-dark); }
+
+/* Loading skeleton */
+.skeleton { background: linear-gradient(90deg, var(--bg2) 25%, var(--bg3) 50%, var(--bg2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: var(--radius); }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-card { height: 220px; }
+
+/* Error state */
+.error-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+.error-state .icon { font-size: 40px; margin-bottom: 12px; }
+.error-state p { margin-bottom: 16px; }
+
+/* ── CART ── */
+.cart-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.cart-empty .icon { font-size: 48px; margin-bottom: 16px; }
+.cart-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+}
+.cart-item-img { width: 52px; height: 52px; object-fit: cover; border-radius: 6px; background: var(--bg3); flex-shrink: 0; }
+.cart-item-info { flex: 1; min-width: 0; }
+.cart-item-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cart-item-price { font-size: 14px; color: var(--red); font-weight: 600; margin-top: 2px; }
+.cart-item-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 4px; transition: var(--transition); flex-shrink: 0; }
+.cart-item-remove:hover { color: var(--red); }
+.cart-total {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 16px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+.cart-total .label { color: var(--text-muted); font-size: 14px; }
+.cart-total .amount { color: var(--red); font-family: var(--font-head); font-size: 20px; }
+
+/* ── ADMIN ── */
+.admin-note {
+  background: rgba(245,166,35,0.08);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+.section-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.section-card h3 { font-family: var(--font-head); font-size: 12px; letter-spacing: 2px; color: var(--red); margin-bottom: 16px; }
+
+/* ── DASHBOARD ── */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  text-align: center;
+}
+.stat-card .value { font-family: var(--font-head); font-size: 24px; color: var(--red); }
+.stat-card .label { font-size: 12px; color: var(--text-muted); margin-top: 6px; letter-spacing: 1px; text-transform: uppercase; }
+.order-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.order-item .order-id { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+.order-badge {
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0,201,122,0.1);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 480px) {
+  .auth-card { padding: 24px 18px; }
+  .products { grid-template-columns: repeat(2, 1fr); }
+  .btn-row { flex-direction: column; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<!-- HEADER -->
+<header>
+  <h1>⚡ FEWGO</h1>
+  <p>MOBILE STORE</p>
+</header>
+
+<!-- NAV TABS -->
+<nav>
+  <button class="nav-btn active" onclick="showTab('shop')">Shop</button>
+  <button class="nav-btn" onclick="showTab('cart')">Cart <span id="cart-badge" class="badge-count" style="display:none">0</span></button>
+  <button class="nav-btn" id="admin-tab" style="display:none" onclick="showTab('admin')">Admin</button>
+  <button class="nav-btn" id="dashboard-tab" style="display:none" onclick="showTab('dashboard')">Dashboard</button>
+  <button class="nav-btn" onclick="showTab('account')">Account</button>
+</nav>
+
+<!-- ═══════════ SHOP SECTION ═══════════ -->
+<div id="tab-shop" class="section active">
+  <div class="products-header">
+    <h2>PRODUCTS</h2>
+  </div>
+  <div class="products" id="products">
+    <div class="skeleton skeleton-card"></div>
+    <div class="skeleton skeleton-card"></div>
+    <div class="skeleton skeleton-card"></div>
+    <div class="skeleton skeleton-card"></div>
+  </div>
+</div>
+
+<!-- ═══════════ CART SECTION ═══════════ -->
+<div id="tab-cart" class="section">
+  <div id="cart-content">
+    <div class="cart-empty" id="cart-empty">
+      <div class="icon">🛒</div>
+      <p>Your cart is empty</p>
+      <button class="btn btn-secondary btn-sm" onclick="showTab('shop')">Browse Products</button>
+    </div>
+    <div id="cart-items"></div>
+    <div id="cart-footer" style="display:none">
+      <div class="cart-total">
+        <span class="label">Total</span>
+        <span class="amount" id="cart-total-amount">₹0</span>
+      </div>
+      <button class="btn btn-primary" onclick="checkout()">Pay Now →</button>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="clearCart()">Clear Cart</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ ADMIN SECTION ═══════════ -->
+<div id="tab-admin" class="section">
+  <div class="admin-note">⚠ Admin access only — visible to authorized users</div>
+  <div class="section-card">
+    <h3>Add Product</h3>
+    <div class="form-group">
+      <label>Product Name</label>
+      <input type="text" id="prod-name" placeholder="e.g. Wireless Earbuds">
+    </div>
+    <div class="form-group">
+      <label>Price (₹)</label>
+      <input type="number" id="prod-price" placeholder="e.g. 999" min="1">
+    </div>
+    <div class="form-group">
+      <label>Image URL</label>
+      <input type="url" id="prod-image" placeholder="https://...">
+    </div>
+    <button class="btn btn-primary" onclick="addProduct()">Add Product</button>
+  </div>
+
+  <!-- Product list with delete -->
+  <div class="section-card">
+    <h3>Manage Products</h3>
+    <div id="admin-product-list"><p style="color:var(--text-muted);font-size:14px">Loading...</p></div>
+  </div>
+</div>
+
+<!-- ═══════════ DASHBOARD SECTION ═══════════ -->
+<div id="tab-dashboard" class="section">
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="value" id="total-orders">0</div>
+      <div class="label">Total Orders</div>
+    </div>
+    <div class="stat-card">
+      <div class="value" id="total-revenue">₹0</div>
+      <div class="label">Revenue</div>
+    </div>
+    <div class="stat-card">
+      <div class="value" id="total-products">0</div>
+      <div class="label">Products</div>
+    </div>
+  </div>
+  <div class="section-card">
+    <h3>Recent Orders</h3>
+    <div id="orders-list"><p style="color:var(--text-muted);font-size:14px">No orders yet.</p></div>
+  </div>
+</div>
+
+<!-- ═══════════ ACCOUNT SECTION ═══════════ -->
+<div id="tab-account" class="section">
+  <div class="auth-card">
+    <!-- Logged OUT state -->
+    <div id="auth-logged-out">
+      <h2>Login / Signup</h2>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="auth-password" placeholder="Min. 6 characters">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="login()">Login</button>
+        <button class="btn btn-secondary" onclick="signup()">Sign Up</button>
+      </div>
+    </div>
+    <!-- Logged IN state -->
+    <div id="auth-logged-in" style="display:none">
+      <h2>My Account</h2>
+      <div class="auth-status">
+        <div class="dot"></div>
+        <span id="user-email-display">user@example.com</span>
+      </div>
+      <button class="btn btn-danger" onclick="logout()" style="margin-top:12px">Sign Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ FIREBASE + APP LOGIC ═══════════ -->
+<script>
+// ══════════════════════════════════════════════════
+// ⚙️  CONFIGURATION — Replace with your real values
+// ══════════════════════════════════════════════════
+var firebaseConfig = {
+  apiKey: "AIzaSyDesnNzx3tcFJO0o-5SuoAyZuouAIGRyjI",
+  authDomain: "fewgo-fc520.firebaseapp.com",
+  projectId: "fewgo-fc520",
+  storageBucket: "fewgo-fc520.firebasestorage.app",
+  messagingSenderId: "315085049522",
+  appId: "1:315085049522:web:ae2d1686350882d7d1c3ab",
+  measurementId: "G-BGKWW9X9PE"
+};
+BAlAob4C1DiqpwoAkY2DLQdL1j9oINQXHofA4gRDCEtLH_w2OngOHiDorMv5xwYHroMH_SG7cVKssyMTAzJfqB8// ══════════════════════════════════════════════════
+// ADMIN EMAILS — Add emails that should have admin access
+// ══════════════════════════════════════════════════
+var ADMIN_EMAILS = [
+  "fewgoltv@gmail.com" // 
+];
+
+// ══════════════════════════════════════════════════
+// FIREBASE INIT
+// ══════════════════════════════════════════════════
+firebase.initializeApp(firebaseConfig);
+var db   = firebase.firestore();
+var auth = firebase.auth();
+
+var currentUser = null;
+var isAdmin = false;
+
+// ══════════════════════════════════════════════════
+// TOAST NOTIFICATIONS (replaces all alert() calls)
+// ══════════════════════════════════════════════════
+function toast(msg, type) {
+  type = type || 'info';
+  var container = document.getElementById('toast-container');
+  var el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  el.onclick = function() { el.remove(); };
+  container.appendChild(el);
+  setTimeout(function() { if (el.parentNode) el.remove(); }, 4000);
+}
+
+// ══════════════════════════════════════════════════
+// TAB NAVIGATION
+// ══════════════════════════════════════════════════
+function showTab(name) {
+  document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  var btn = document.querySelector('[onclick="showTab(\'' + name + '\')"]');
+  if (btn) btn.classList.add('active');
+}
+
+// ══════════════════════════════════════════════════
+// AUTH — FIX #3: Admin check + proper UI state
+// ══════════════════════════════════════════════════
+auth.onAuthStateChanged(function(user) {
+  currentUser = user;
+  isAdmin = user && ADMIN_EMAILS.indexOf(user.email) !== -1;
+
+  document.getElementById('auth-logged-out').style.display = user ? 'none' : 'block';
+  document.getElementById('auth-logged-in').style.display  = user ? 'block' : 'none';
+  if (user) document.getElementById('user-email-display').textContent = user.email;
+
+  // FIX #3: Only show admin/dashboard tabs for admin users
+  document.getElementById('admin-tab').style.display     = isAdmin ? 'block' : 'none';
+  document.getElementById('dashboard-tab').style.display = isAdmin ? 'block' : 'none';
+
+  if (isAdmin) {
+    loadDashboard();
+    loadAdminProducts();
+  }
+});
+
+function login() {
+  var email = document.getElementById('auth-email').value.trim();
+  var pass  = document.getElementById('auth-password').value;
+  if (!email || !pass) { toast('Please enter email and password', 'error'); return; }
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(function() { toast('Welcome back!', 'success'); showTab('shop'); })
+    .catch(function(e) { toast(e.message, 'error'); });
+}
+
+function signup() {
+  var email = document.getElementById('auth-email').value.trim();
+  var pass  = document.getElementById('auth-password').value;
+  if (!email || !pass) { toast('Please enter email and password', 'error'); return; }
+  if (pass.length < 6) { toast('Password must be at least 6 characters', 'error'); return; }
+  auth.createUserWithEmailAndPassword(email, pass)
+    .then(function() { toast('Account created! Welcome to Fewgo.', 'success'); showTab('shop'); })
+    .catch(function(e) { toast(e.message, 'error'); });
+}
+
+function logout() {
+  auth.signOut()
+    .then(function() { toast('Signed out', 'info'); showTab('shop'); })
+    .catch(function(e) { toast(e.message, 'error'); });
+}
+
+// ══════════════════════════════════════════════════
+// PRODUCTS — FIX #2: Loading state + error handling + image fallback
+// ══════════════════════════════════════════════════
+var FALLBACK_IMG = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEzMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEzMCIgZmlsbD0iIzE4MTgxOCIvPjx0ZXh0IHg9IjEwMCIgeT0iNzAiIGZvbnQtc2l6ZT0iMzAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM0NDQiPvCfk6Y8L3RleHQ+PC9zdmc+';
+
+db.collection('products').orderBy('price').onSnapshot(
+  function(snap) {
+    var container = document.getElementById('products');
+    container.innerHTML = '';
+
+    if (snap.empty) {
+      container.innerHTML = '<div class="error-state"><div class="icon">📦</div><p>No products yet.</p></div>';
+      document.getElementById('total-products').textContent = 0;
+      return;
+    }
+
+    document.getElementById('total-products').textContent = snap.size;
+
+    snap.forEach(function(doc) {
+      var p = doc.data();
+      var card = document.createElement('div');
+      card.className = 'card';
+
+      var img = document.createElement('img');
+      img.src = p.image || '';
+      img.alt = p.name;
+      // FIX: Image error fallback
+      img.onerror = function() { this.src = FALLBACK_IMG; };
+      if (!p.image) img.src = FALLBACK_IMG;
+
+      var body = document.createElement('div');
+      body.className = 'card-body';
+      body.innerHTML =
+        '<div class="card-name">' + escapeHtml(p.name) + '</div>' +
+        '<div class="card-price">₹' + Number(p.price).toLocaleString('en-IN') + '</div>';
+
+      var addBtn = document.createElement('button');
+      addBtn.className = 'card-add';
+      addBtn.textContent = '+ Add to Cart';
+      addBtn.onclick = function(e) {
+        e.stopPropagation();
+        addToCart({ id: doc.id, name: p.name, price: p.price, image: p.image || '' });
+      };
+
+      body.appendChild(addBtn);
+      card.appendChild(img);
+      card.appendChild(body);
+      container.appendChild(card);
+    });
+  },
+  function(err) {
+    // FIX #2: Show error if Firestore query fails
+    document.getElementById('products').innerHTML =
+      '<div class="error-state"><div class="icon">⚠️</div><p>Could not load products. Check your connection.</p><button class="btn btn-secondary btn-sm" onclick="location.reload()">Retry</button></div>';
+    console.error('Products load error:', err);
+  }
+);
+
+// ══════════════════════════════════════════════════
+// ADMIN PRODUCT MANAGEMENT — FIX #3: Admin-only
+// ══════════════════════════════════════════════════
+function addProduct() {
+  // FIX #3: Check admin before allowing write
+  if (!isAdmin) { toast('Admin access required', 'error'); return; }
+
+  var name  = document.getElementById('prod-name').value.trim();
+  var price = parseFloat(document.getElementById('prod-price').value);
+  var image = document.getElementById('prod-image').value.trim();
+
+  if (!name)        { toast('Product name is required', 'error'); return; }
+  if (!price || price <= 0) { toast('Enter a valid price', 'error'); return; }
+
+  db.collection('products').add({
+    name:      name,
+    price:     price,
+    image:     image || '',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  })
+  .then(function() {
+    document.getElementById('prod-name').value  = '';
+    document.getElementById('prod-price').value = '';
+    document.getElementById('prod-image').value = '';
+    toast('Product added!', 'success');
+  })
+  .catch(function(e) { toast('Error: ' + e.message, 'error'); });
+}
+
+function loadAdminProducts() {
+  var list = document.getElementById('admin-product-list');
+  db.collection('products').orderBy('price').onSnapshot(function(snap) {
+    list.innerHTML = '';
+    if (snap.empty) { list.innerHTML = '<p style="color:var(--text-muted);font-size:14px">No products.</p>'; return; }
+    snap.forEach(function(doc) {
+      var p = doc.data();
+      var row = document.createElement('div');
+      row.className = 'order-item';
+      row.innerHTML =
+        '<div><div style="font-weight:600">' + escapeHtml(p.name) + '</div><div class="order-id">₹' + Number(p.price).toLocaleString('en-IN') + '</div></div>' +
+        '<button class="btn btn-danger btn-sm" onclick="deleteProduct(\'' + doc.id + '\')">Delete</button>';
+      list.appendChild(row);
+    });
+  });
+}
+
+function deleteProduct(id) {
+  if (!isAdmin) { toast('Admin access required', 'error'); return; }
+  if (!confirm('Delete this product?')) return;
+  db.collection('products').doc(id).delete()
+    .then(function() { toast('Product deleted', 'info'); })
+    .catch(function(e) { toast('Error: ' + e.message, 'error'); });
+}
+
+// ══════════════════════════════════════════════════
+// CART — FIX #1: Persist to localStorage
+// ══════════════════════════════════════════════════
+var cartItems = [];
+
+function loadCartFromStorage() {
+  try {
+    var saved = localStorage.getItem('fewgo_cart');
+    cartItems = saved ? JSON.parse(saved) : [];
+  } catch(e) { cartItems = []; }
+  renderCart();
+}
+
+function saveCartToStorage() {
+  try { localStorage.setItem('fewgo_cart', JSON.stringify(cartItems)); } catch(e) {}
+}
+
+function addToCart(p) {
+  cartItems.push(p);
+  saveCartToStorage();
+  renderCart();
+  toast(p.name + ' added to cart', 'success');
+}
+
+function removeFromCart(idx) {
+  cartItems.splice(idx, 1);
+  saveCartToStorage();
+  renderCart();
+}
+
+function clearCart() {
+  cartItems = [];
+  saveCartToStorage();
+  renderCart();
+}
+
+function renderCart() {
+  var emptyEl   = document.getElementById('cart-empty');
+  var itemsEl   = document.getElementById('cart-items');
+  var footerEl  = document.getElementById('cart-footer');
+  var badgeEl   = document.getElementById('cart-badge');
+  var totalEl   = document.getElementById('cart-total-amount');
+
+  itemsEl.innerHTML = '';
+
+  if (cartItems.length === 0) {
+    emptyEl.style.display  = 'block';
+    footerEl.style.display = 'none';
+    badgeEl.style.display  = 'none';
+  } else {
+    emptyEl.style.display  = 'none';
+    footerEl.style.display = 'block';
+    badgeEl.style.display  = 'inline-flex';
+    badgeEl.textContent    = cartItems.length;
+
+    var total = 0;
+    cartItems.forEach(function(item, idx) {
+      total += item.price;
+      var div = document.createElement('div');
+      div.className = 'cart-item';
+      var img = document.createElement('img');
+      img.className = 'cart-item-img';
+      img.src = item.image || FALLBACK_IMG;
+      img.onerror = function() { this.src = FALLBACK_IMG; };
+      div.appendChild(img);
+      var info = document.createElement('div');
+      info.className = 'cart-item-info';
+      info.innerHTML = '<div class="cart-item-name">' + escapeHtml(item.name) + '</div><div class="cart-item-price">₹' + Number(item.price).toLocaleString('en-IN') + '</div>';
+      div.appendChild(info);
+      var rm = document.createElement('button');
+      rm.className = 'cart-item-remove';
+      rm.innerHTML = '✕';
+      rm.onclick = (function(i) { return function() { removeFromCart(i); }; })(idx);
+      div.appendChild(rm);
+      itemsEl.appendChild(div);
+    });
+
+    totalEl.textContent = '₹' + total.toLocaleString('en-IN');
+  }
+}
+
+// ══════════════════════════════════════════════════
+// CHECKOUT — FIX #4 & #5: Auth check + payment verification note
+// ══════════════════════════════════════════════════
+function checkout() {
+  if (cartItems.length === 0) { toast('Your cart is empty', 'error'); return; }
+
+  // FIX #4: Require login before checkout
+  if (!currentUser) {
+    toast('Please log in to place an order', 'error');
+    showTab('account');
+    return;
+  }
+
+  var total = cartItems.reduce(function(s, i) { return s + i.price; }, 0);
+
+  var options = {
+    key:      RAZORPAY_KEY,
+    amount:   total * 100, // in paise
+    currency: 'INR',
+    name:     'Fewgo Store',
+    description: 'Order of ' + cartItems.length + ' item(s)',
+    prefill: {
+      email: currentUser.email
+    },
+    theme: { color: '#e8001d' },
+    // FIX #5: Payment verification
+    // ⚠️  IMPORTANT: In production, move this handler to a Firebase Cloud Function.
+    // After payment, call your backend with payment_id + order_id + signature
+    // to verify using Razorpay's verifyPaymentSignature before saving the order.
+    handler: function(response) {
+      // response.razorpay_payment_id is available for verification
+      var orderData = {
+        cart:            cartItems,
+        total:           total,
+        userId:          currentUser.uid,
+        userEmail:       currentUser.email,
+        paymentId:       response.razorpay_payment_id || 'unverified',
+        paymentVerified: false, // ← set to true only after server-side verification
+        date:            firebase.firestore.FieldValue.serverTimestamp(),
+        status:          'pending_verification'
+      };
+
+      db.collection('orders').add(orderData)
+        .then(function() {
+          toast('Order placed! Payment ID: ' + (response.razorpay_payment_id || '?'), 'success');
+          clearCart();
+          if (isAdmin) loadDashboard();
+        })
+        .catch(function(e) { toast('Order save failed: ' + e.message, 'error'); });
+    },
+    modal: {
+      ondismiss: function() { toast('Payment cancelled', 'info'); }
+    }
+  };
+
+  try {
+    new Razorpay(options).open();
+  } catch(e) {
+    toast('Payment gateway error. Check your Razorpay key.', 'error');
+    console.error('Razorpay error:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════
+// DASHBOARD — Admin only, FIX #3
+// ══════════════════════════════════════════════════
+function loadDashboard() {
+  db.collection('orders').orderBy('date', 'desc').onSnapshot(
+    function(snap) {
+      var revenue = 0;
+      var list = document.getElementById('orders-list');
+      list.innerHTML = '';
+
+      snap.forEach(function(doc) {
+        var o = doc.data();
+        revenue += (o.total || 0);
+        var div = document.createElement('div');
+        div.className = 'order-item';
+        div.innerHTML =
+          '<div><div style="font-weight:600">' + (o.userEmail || 'Unknown') + '</div>' +
+          '<div class="order-id">ID: ' + doc.id.substring(0,10) + '...</div></div>' +
+          '<div style="text-align:right">' +
+            '<div style="font-weight:700;color:var(--red)">₹' + Number(o.total || 0).toLocaleString('en-IN') + '</div>' +
+            '<span class="order-badge">' + (o.status || 'completed') + '</span>' +
+          '</div>';
+        list.appendChild(div);
+      });
+
+      if (snap.empty) list.innerHTML = '<p style="color:var(--text-muted);font-size:14px">No orders yet.</p>';
+
+      document.getElementById('total-orders').textContent  = snap.size;
+      document.getElementById('total-revenue').textContent = '₹' + revenue.toLocaleString('en-IN');
+    },
+    function(err) { console.error('Dashboard error:', err); }
+  );
+}
+
+// ══════════════════════════════════════════════════
+// UTILITY
+// ══════════════════════════════════════════════════
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ══════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════
+loadCartFromStorage();
+
+</script>
+</body>
+</html>
